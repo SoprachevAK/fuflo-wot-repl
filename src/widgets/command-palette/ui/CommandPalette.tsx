@@ -1,86 +1,59 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
+import { Command } from 'cmdk'
 import { disconnect } from '@/features/connect-session'
 import { consoleBus } from '@/entities/console'
 
-interface Command {
-  id: string
-  title: string
-  run: () => void
-}
+const COMMANDS = [
+  { id: 'clear', title: 'Clear console', run: () => consoleBus.clear() },
+  { id: 'disconnect', title: 'Disconnect session', run: () => void disconnect() },
+]
 
 export function CommandPalette() {
   const [open, setOpen] = useState(false)
-  const [query, setQuery] = useState('')
-
-  const commands = useMemo<Command[]>(
-    () => [
-      { id: 'clear', title: 'Clear console', run: () => consoleBus.clear() },
-      { id: 'disconnect', title: 'Disconnect session', run: () => void disconnect() },
-    ],
-    [],
-  )
 
   useEffect(() => {
-    // Capture phase: Monaco binds Ctrl+K as a chord prefix and swallows it while
-    // the editor is focused, so a bubble-phase window listener never fires. We
-    // intercept on the way down and stop Monaco from seeing it.
     const onKey = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+      // Match the PHYSICAL key via e.code, not e.key: on non-Latin layouts
+      // (RU) the K key reports e.key === 'л', so an e.key check never fires.
+      // Capture phase so Monaco's Ctrl+K chord can't swallow it first.
+      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyK') {
         e.preventDefault()
         e.stopPropagation()
-        setQuery('')
         setOpen((v) => !v)
-      } else if (e.key === 'Escape') {
-        setOpen((v) => (v ? false : v))
       }
     }
     window.addEventListener('keydown', onKey, true)
     return () => window.removeEventListener('keydown', onKey, true)
   }, [])
 
-  if (!open) return null
-
-  const filtered = commands.filter((c) =>
-    c.title.toLowerCase().includes(query.toLowerCase()),
-  )
-
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 pt-32"
-      onClick={() => setOpen(false)}
+    <Command.Dialog
+      open={open}
+      onOpenChange={setOpen}
+      label="Command palette"
+      overlayClassName="fixed inset-0 z-50 bg-black/40"
+      contentClassName="fixed left-1/2 top-32 z-50 w-[480px] -translate-x-1/2 overflow-hidden rounded-lg border border-edge bg-panel shadow-2xl"
     >
-      <div
-        className="w-[480px] overflow-hidden rounded-lg border border-edge bg-panel shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <input
-          autoFocus
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Type a command"
-          className="w-full border-b border-edge bg-elevated px-3 py-2 text-[13px] text-fg outline-none placeholder:text-faint"
-        />
-        <ul className="max-h-72 overflow-auto py-1">
-          {filtered.length === 0 ? (
-            <li className="px-3 py-2 text-[12px] text-faint">No commands</li>
-          ) : (
-            filtered.map((c) => (
-              <li key={c.id}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    c.run()
-                    setOpen(false)
-                  }}
-                  className="block w-full px-3 py-1.5 text-left text-[13px] text-fg hover:bg-elevated"
-                >
-                  {c.title}
-                </button>
-              </li>
-            ))
-          )}
-        </ul>
-      </div>
-    </div>
+      <Command.Input
+        placeholder="Type a command"
+        className="w-full border-b border-edge bg-elevated px-3 py-2 text-[13px] text-fg outline-none placeholder:text-faint"
+      />
+      <Command.List className="max-h-72 overflow-auto py-1">
+        <Command.Empty className="px-3 py-2 text-[12px] text-faint">No commands</Command.Empty>
+        {COMMANDS.map((c) => (
+          <Command.Item
+            key={c.id}
+            value={c.title}
+            onSelect={() => {
+              c.run()
+              setOpen(false)
+            }}
+            className="mx-1 cursor-pointer rounded px-2 py-1.5 text-[13px] text-fg data-[selected=true]:bg-elevated"
+          >
+            {c.title}
+          </Command.Item>
+        ))}
+      </Command.List>
+    </Command.Dialog>
   )
 }
