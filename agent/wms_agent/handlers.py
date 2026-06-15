@@ -13,6 +13,15 @@ def _ns():
     return sys.modules['__main__'].__dict__
 
 
+def seed_namespace():
+    ns = _ns()
+    for name in ('BigWorld', 'ResMgr', 'Math', 'Account'):
+        try:
+            ns[name] = __import__(name)
+        except BaseException:
+            pass
+
+
 def handle_exec(req):
     code = req.get('code', '')
     ns = _ns()

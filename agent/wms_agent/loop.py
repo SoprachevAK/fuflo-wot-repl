@@ -12,7 +12,7 @@ import collections
 from .framebus import FrameBus
 from .capture import Capture
 from .runner import run_on_main
-from .handlers import DISPATCH, MAIN_THREAD_OPS
+from .handlers import DISPATCH, MAIN_THREAD_OPS, seed_namespace
 
 _state = {'agent': None, 'running': False}
 
@@ -27,6 +27,10 @@ class _Agent(object):
 
     def start(self):
         self._capture.install()
+        # Seed inline, NOT via run_on_main: it only imports modules (no game-object
+        # access), and start() may itself run on the game main thread -- scheduling
+        # onto that same thread and blocking on it would deadlock.
+        seed_namespace()
         self._running = True
         thread = threading.Thread(target=self._run)
         thread.setDaemon(True)
