@@ -68,28 +68,87 @@ pub fn detect_games() -> Vec<GameInfo> {
     let mut out = Vec::new();
     let mut seen = std::collections::HashSet::new();
     for root in ROOTS {
-        let root_path = Path::new(root);
-        if !root_path.is_dir() {
-            continue;
-        }
-        let Ok(entries) = fs::read_dir(root_path) else {
+        let Ok(entries) = fs::read_dir(Path::new(root)) else {
             continue;
         };
         for entry in entries.flatten() {
-            let dir = entry.path();
-            if !dir.is_dir() {
+            push_if_game(&entry.path(), &mut out, &mut seen);
+        }
+    }
+    for dir in registry_install_dirs() {
+        push_if_game(&dir, &mut out, &mut seen);
+    }
+    out
+}
+
+fn push_if_game(dir: &Path, out: &mut Vec<GameInfo>, seen: &mut std::collections::HashSet<String>) {
+    if let Some(info) = inspect_dir(dir) {
+        if seen.insert(info.path.to_lowercase()) {
+            out.push(info);
+        }
+    }
+}
+
+/// Validate a single directory as a game install (used by registry/FS detection
+/// and the manual folder picker). Normalizes the path so the same install found
+/// via different roots dedups cleanly.
+pub fn inspect_dir(dir: &Path) -> Option<GameInfo> {
+    let dir = normalize(dir);
+    if !dir.is_dir() {
+        return None;
+    }
+    let exe = EXES.iter().find(|e| dir.join(e).is_file())?;
+    read_game(&dir, exe)
+}
+
+/// Resolve to an absolute path and strip Windows' `\\?\` verbatim prefix.
+fn normalize(dir: &Path) -> PathBuf {
+    let resolved = fs::canonicalize(dir).unwrap_or_else(|_| dir.to_path_buf());
+    let s = resolved.to_string_lossy();
+    match s.strip_prefix(r"\\?\") {
+        Some(rest) => PathBuf::from(rest),
+        None => resolved,
+    }
+}
+
+/// Game install dirs registered under the Uninstall hives (Lesta Game Center and
+/// Wargaming.net Game Center both write `InstallLocation` there).
+#[cfg(windows)]
+fn registry_install_dirs() -> Vec<PathBuf> {
+    use winreg::enums::{HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE};
+    use winreg::RegKey;
+
+    const UNINSTALL: &str = r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall";
+    const UNINSTALL_WOW: &str = r"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall";
+    let hives = [
+        (RegKey::predef(HKEY_LOCAL_MACHINE), UNINSTALL),
+        (RegKey::predef(HKEY_LOCAL_MACHINE), UNINSTALL_WOW),
+        (RegKey::predef(HKEY_CURRENT_USER), UNINSTALL),
+    ];
+
+    let mut dirs = Vec::new();
+    for (hive, path) in hives {
+        let Ok(uninstall) = hive.open_subkey(path) else {
+            continue;
+        };
+        for name in uninstall.enum_keys().flatten() {
+            let Ok(entry) = uninstall.open_subkey(&name) else {
                 continue;
-            }
-            if let Some(exe) = EXES.iter().find(|e| dir.join(e).is_file()) {
-                if let Some(info) = read_game(&dir, exe) {
-                    if seen.insert(info.path.clone()) {
-                        out.push(info);
-                    }
+            };
+            if let Ok(loc) = entry.get_value::<String, _>("InstallLocation") {
+                let loc = loc.trim();
+                if !loc.is_empty() {
+                    dirs.push(PathBuf::from(loc));
                 }
             }
         }
     }
-    out
+    dirs
+}
+
+#[cfg(not(windows))]
+fn registry_install_dirs() -> Vec<PathBuf> {
+    Vec::new()
 }
 
 fn read_game(dir: &Path, exe: &str) -> Option<GameInfo> {

@@ -104,6 +104,12 @@ pub fn detect_games() -> Vec<GameInfo> {
     install::detect_games()
 }
 
+/// Validate a manually-picked folder; `None` if it isn't a WoT/Tanki install.
+#[tauri::command]
+pub fn inspect_game_dir(dir: String) -> Option<GameInfo> {
+    install::inspect_dir(std::path::Path::new(&dir))
+}
+
 #[tauri::command]
 pub fn install_agent(game_dir: String, mods_version: String) -> Result<String, String> {
     install::install_agent(&game_dir, &mods_version)

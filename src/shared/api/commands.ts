@@ -9,6 +9,7 @@ export const api = {
   writeStubs: (stubs: Record<string, string>) => invoke<string>('write_stubs', { stubs }),
 
   detectGames: () => invoke<GameInfo[]>('detect_games'),
+  inspectGameDir: (dir: string) => invoke<GameInfo | null>('inspect_game_dir', { dir }),
   installAgent: (gameDir: string, modsVersion: string) =>
     invoke<string>('install_agent', { gameDir, modsVersion }),
   launchGame: (gameDir: string, exe: string) =>

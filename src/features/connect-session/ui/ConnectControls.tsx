@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import type { GameInfo } from '@/shared/api'
 import { useSession } from '@/entities/session'
 import { connect, disconnect } from '../model/connect'
-import { detectGames, setupAndConnect } from '../model/setup'
+import { detectGames, pickGame, setupAndConnect } from '../model/setup'
 
 const BTN =
   'h-7 rounded border border-edge px-3 text-[12px] text-fg transition-colors hover:border-live disabled:opacity-40'
@@ -19,6 +19,20 @@ export function ConnectControls() {
   const connected = status === 'connected'
   const busy = status === 'connecting'
   const game = games[selected]
+
+  const onBrowse = async () => {
+    const info = await pickGame()
+    if (!info) return
+    setGames((prev) => {
+      const at = prev.findIndex((g) => g.path.toLowerCase() === info.path.toLowerCase())
+      if (at >= 0) {
+        setSelected(at)
+        return prev
+      }
+      setSelected(prev.length)
+      return [...prev, info]
+    })
+  }
 
   if (connected) {
     return (
@@ -46,6 +60,9 @@ export function ConnectControls() {
       ) : (
         <span className="text-[12px] text-faint">no client detected</span>
       )}
+      <button type="button" onClick={() => void onBrowse()} disabled={busy} className={BTN} title="Pick the game folder manually">
+        Browse…
+      </button>
       <button
         type="button"
         onClick={() => game && void setupAndConnect(game, true)}

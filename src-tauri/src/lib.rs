@@ -10,6 +10,7 @@ use session::AppState;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .manage(AppState::default())
         .setup(|app| {
             if cfg!(debug_assertions) {
@@ -27,6 +28,7 @@ pub fn run() {
             commands::stubs_dir,
             commands::write_stubs,
             commands::detect_games,
+            commands::inspect_game_dir,
             commands::install_agent,
             commands::launch_game,
             commands::connect,
