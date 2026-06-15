@@ -13,6 +13,15 @@ function kindOf(c: Candidate): monaco.languages.CompletionItemKind {
   return KIND_PROPERTY
 }
 
+// Order public names first, single-underscore "semi-private" next, and truly
+// private members last: Python name-mangles a class's `__field` to
+// `_ClassName__field`, and `__dunder__` are also noise for everyday use.
+function privacyRank(name: string): number {
+  if (!name.startsWith('_')) return 0
+  if (/^_[A-Za-z]\w*__\w/.test(name) || name.startsWith('__')) return 2
+  return 1
+}
+
 export function toMonacoCompletion(
   c: Candidate,
   range: monaco.IRange,
@@ -34,6 +43,6 @@ export function toMonacoCompletion(
     detail: c.signature ?? c.kind ?? (live ? 'live' : 'static'),
     documentation: c.doc ?? undefined,
     range,
-    sortText: live ? `0_${c.name}` : `1_${c.name}`,
+    sortText: `${privacyRank(c.name)}_${live ? '0' : '1'}_${c.name.toLowerCase()}`,
   }
 }
