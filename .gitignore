@@ -21,3 +21,6 @@ src-tauri/gen/schemas
 __pycache__/
 *.pyc
 agent/dist/
+
+# dev screenshots
+shot*.png
