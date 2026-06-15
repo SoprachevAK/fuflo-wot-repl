@@ -1,11 +1,23 @@
 import { useEffect, useState } from 'react'
 import type { GameInfo } from '@/shared/api'
+import { loadState } from '@/shared/lib'
 import { useSession } from '@/entities/session'
-import { connect, disconnect } from '../model/connect'
-import { detectGames, pickGame, setupAndConnect } from '../model/setup'
+import { connect, disconnect, reconnect } from '../model/connect'
+import { detectGames, pickGame, setupAndConnect, LAST_GAME_KEY } from '../model/setup'
 
 const BTN =
   'h-7 rounded border border-edge px-3 text-[12px] text-fg transition-colors hover:border-live disabled:opacity-40'
+
+function isGameInfo(value: unknown): value is GameInfo {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    typeof (value as GameInfo).path === 'string' &&
+    typeof (value as GameInfo).version === 'string' &&
+    typeof (value as GameInfo).modsVersion === 'string' &&
+    typeof (value as GameInfo).exe === 'string'
+  )
+}
 
 export function ConnectControls() {
   const status = useSession((s) => s.status)
@@ -13,7 +25,21 @@ export function ConnectControls() {
   const [selected, setSelected] = useState(0)
 
   useEffect(() => {
-    void detectGames().then(setGames)
+    void detectGames().then((detected) => {
+      const saved = loadState<unknown>(LAST_GAME_KEY, null)
+      if (!isGameInfo(saved)) {
+        setGames(detected)
+        return
+      }
+      const at = detected.findIndex((g) => g.path.toLowerCase() === saved.path.toLowerCase())
+      if (at >= 0) {
+        setGames(detected)
+        setSelected(at)
+      } else {
+        setGames([...detected, saved])
+        setSelected(detected.length)
+      }
+    })
   }, [])
 
   const connected = status === 'connected'
@@ -79,6 +105,15 @@ export function ConnectControls() {
         title="Connect to an already-running client"
       >
         Connect
+      </button>
+      <button
+        type="button"
+        onClick={() => void reconnect()}
+        disabled={busy}
+        className={BTN}
+        title="Reconnect to the last buffer directory"
+      >
+        Reconnect
       </button>
     </div>
   )

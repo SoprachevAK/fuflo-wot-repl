@@ -138,6 +138,10 @@ pub fn connect(
         .inner
         .lock()
         .map_err(|_| "state lock poisoned".to_string())?;
+    // Stop any prior transport so a reconnect doesn't leak its reader thread.
+    if let Some(old) = inner.transport.take() {
+        old.stop();
+    }
     inner.transport = Some(transport);
     inner.buffer_dir = Some(dir);
     Ok(())
