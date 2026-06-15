@@ -1,0 +1,23 @@
+node_modules
+dist
+dist-ssr
+*.local
+
+# Rust / Tauri
+src-tauri/target
+src-tauri/gen/schemas
+
+# Editor
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+
+# build artifacts / logs
+*.log
+
+# tooling / python caches
+.omc/
+__pycache__/
+*.pyc
+agent/dist/
