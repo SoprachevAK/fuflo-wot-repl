@@ -1,9 +1,11 @@
 import { api } from '@/shared/api'
 import { consoleBus } from '@/entities/console'
+import { pushHistory } from '@/entities/editor'
 
 export async function runCode(code: string): Promise<void> {
   const trimmed = code.trim()
   if (!trimmed) return
+  pushHistory(trimmed)
   consoleBus.append([{ stream: 'input', text: `>>> ${trimmed.replace(/\n/g, '\n... ')}\n` }])
   try {
     const frame = await api.execCode(code)

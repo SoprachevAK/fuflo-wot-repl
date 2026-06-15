@@ -1,10 +1,10 @@
 import { useEffect, useRef } from 'react'
-import { monaco } from '@/shared/lib'
+import { monaco, loadState, saveState } from '@/shared/lib'
 import { Panel, HeaderButton } from '@/shared/ui'
 import { registerPythonCompletion } from '@/features/complete-code'
 import { attachLinter } from '@/features/lint-code'
 import { runCode } from '@/features/run-code'
-import { useEditorCursor } from '@/entities/editor'
+import { useEditorCursor, getHistory } from '@/entities/editor'
 import { useSession } from '@/entities/session'
 
 const SAMPLE = [
@@ -31,6 +31,7 @@ export function EditorPanel() {
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null)
   const setCursor = useEditorCursor((s) => s.setCursor)
   const connected = useSession((s) => s.status === 'connected')
+  const historyIndexRef = useRef<number>(-1)
 
   useEffect(() => {
     const host = container.current
@@ -38,7 +39,7 @@ export function EditorPanel() {
     if (!completionDisposable) completionDisposable = registerPythonCompletion(monaco)
 
     const editor = monaco.editor.create(host, {
-      value: SAMPLE,
+      value: loadState<string>('editor.buffer', SAMPLE),
       language: 'python',
       theme: 'wms-dark',
       automaticLayout: true,
@@ -63,11 +64,53 @@ export function EditorPanel() {
 
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, () => runEditor(editor))
 
+    // Alt+Arrow for history cycling — using Alt instead of bare arrows so normal
+    // cursor movement and the suggest-widget navigation stay unaffected.
+    editor.addCommand(monaco.KeyMod.Alt | monaco.KeyCode.UpArrow, () => {
+      const history = getHistory()
+      if (history.length === 0) return
+      const next = historyIndexRef.current === -1 ? history.length - 1 : Math.max(0, historyIndexRef.current - 1)
+      historyIndexRef.current = next
+      editor.setValue(history[next])
+      const lineCount = editor.getModel()?.getLineCount() ?? 1
+      editor.setPosition({ lineNumber: lineCount, column: editor.getModel()?.getLineMaxColumn(lineCount) ?? 1 })
+    })
+
+    editor.addCommand(monaco.KeyMod.Alt | monaco.KeyCode.DownArrow, () => {
+      const history = getHistory()
+      if (historyIndexRef.current === -1) return
+      if (historyIndexRef.current >= history.length - 1) {
+        historyIndexRef.current = -1
+        editor.setValue('')
+        editor.setPosition({ lineNumber: 1, column: 1 })
+        return
+      }
+      const next = historyIndexRef.current + 1
+      historyIndexRef.current = next
+      editor.setValue(history[next])
+      const lineCount = editor.getModel()?.getLineCount() ?? 1
+      editor.setPosition({ lineNumber: lineCount, column: editor.getModel()?.getLineMaxColumn(lineCount) ?? 1 })
+    })
+
     const cursorSub = editor.onDidChangeCursorPosition((e) =>
       setCursor(e.position.lineNumber, e.position.column),
     )
 
+    let saveTimer: ReturnType<typeof setTimeout> | null = null
+    const contentSub = editor.onDidChangeModelContent(() => {
+      if (saveTimer !== null) clearTimeout(saveTimer)
+      saveTimer = setTimeout(() => {
+        const value = editor.getValue()
+        // Skip persisting unreasonably large buffers (a big paste) to avoid
+        // thrashing localStorage quota on every keystroke.
+        if (value.length <= 256 * 1024) saveState('editor.buffer', value)
+        saveTimer = null
+      }, 400)
+    })
+
     return () => {
+      if (saveTimer !== null) clearTimeout(saveTimer)
+      contentSub.dispose()
       cursorSub.dispose()
       detachLint()
       editor.dispose()
