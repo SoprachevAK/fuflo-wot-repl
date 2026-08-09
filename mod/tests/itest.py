@@ -1,7 +1,8 @@
 """Integration test: drive the real agent loop like the desktop would.
 
 Exercises the daemon poll thread, main-thread dispatch (inline without BigWorld),
-stdout capture, and namespace persistence across requests. Runs on py2.7 or 3.x.
+stdout capture, shutdown frames, and namespace persistence across requests. Runs
+on py2.7 or 3.x.
 """
 
 import os
@@ -42,10 +43,18 @@ def main():
             time.sleep(0.02)
 
         wms_agent.stop()  # restores stdout before we assert/print
+        disconnected = False
+        disconnected_deadline = time.time() + 1.0
+        while time.time() < disconnected_deadline and not disconnected:
+            disconnected = any(
+                frame.get("type") == "disconnected"
+                for frame in desktop.drain())
+            time.sleep(0.02)
 
         assert results.get("2", {}).get("repr") == "84", results
         assert "hello" in stdout_text, repr(stdout_text)
         assert hello.get("version") == wms_agent.__version__, hello
+        assert disconnected, "agent should send disconnected on stop"
 
         print("ITEST OK  ns-persist x*2=%s  captured=%r"
               % (results["2"]["repr"], stdout_text.strip()))

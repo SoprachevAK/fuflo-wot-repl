@@ -40,8 +40,13 @@ class _Agent(object):
         self._bus.send({'type': 'hello', 'version': __version__, 'pid': os.getpid()})
 
     def stop(self):
+        if not self._running:
+            return
         self._running = False
-        self._capture.uninstall()
+        try:
+            self._capture.uninstall()
+        finally:
+            self._bus.send({'type': 'disconnected'})
 
     def _flush_output(self):
         pending = len(self._queue)

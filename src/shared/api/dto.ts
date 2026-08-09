@@ -32,6 +32,7 @@ export interface GameInfo {
 export type ServerEvent =
   | { kind: 'log'; lines: LogLine[] }
   | { kind: 'hello'; version?: string | null; pid?: number | null }
+  | { kind: 'disconnected' }
 
 export type OutFrame =
   | { type: 'hello'; version?: string | null; pid?: number | null }

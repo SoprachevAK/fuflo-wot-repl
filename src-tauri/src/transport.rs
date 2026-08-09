@@ -39,6 +39,7 @@ impl FileBufferTransport {
             running: Arc::new(AtomicBool::new(true)),
             sink,
         });
+        transport.reset_buffers();
         let worker = Arc::clone(&transport);
         thread::spawn(move || worker.read_loop());
         transport
@@ -61,6 +62,23 @@ impl FileBufferTransport {
         rx
     }
 
+    /// A previous desktop/game session may have left frames behind after its
+    /// reader stopped. They belong to that session and must not affect the
+    /// next connection.
+    fn reset_buffers(&self) {
+        for name in ["c2d", "d2c"] {
+            let path = self.dir.join(name);
+            if !path.exists() {
+                continue;
+            }
+            let lock = self.dir.join(format!("{name}.lock"));
+            if acquire(&lock) {
+                let _ = fs::write(path, b"");
+                release(&lock);
+            }
+        }
+    }
+
     fn append(&self, name: &str, line: &str) {
         let path = self.dir.join(name);
         let lock = self.dir.join(format!("{name}.lock"));
@@ -77,10 +95,18 @@ impl FileBufferTransport {
     fn read_loop(&self) {
         let path = self.dir.join("c2d");
         let lock = self.dir.join("c2d.lock");
+        let mut handshake_seen = false;
+        let mut game_pid = None;
         while self.running.load(Ordering::Relaxed) {
             let mut batch = Vec::new();
+            let mut disconnected = false;
             for line in drain_file(&path, &lock) {
                 match serde_json::from_str::<OutFrame>(&line) {
+                    Ok(OutFrame::Disconnected) => {
+                        if handshake_seen {
+                            disconnected = true;
+                        }
+                    }
                     Ok(OutFrame::Stdout {
                         stream,
                         level,
@@ -91,6 +117,8 @@ impl FileBufferTransport {
                         text,
                     }),
                     Ok(OutFrame::Hello { version, pid }) => {
+                        handshake_seen = true;
+                        game_pid = pid;
                         (self.sink)(ServerEvent::Hello { version, pid });
                     }
                     Ok(frame) => {
@@ -107,9 +135,66 @@ impl FileBufferTransport {
             if !batch.is_empty() {
                 (self.sink)(ServerEvent::Log { lines: batch });
             }
+            if disconnected {
+                (self.sink)(ServerEvent::Disconnected);
+                self.running.store(false, Ordering::Relaxed);
+                break;
+            }
+            if game_pid
+                .map(|pid| !is_process_alive(pid))
+                .unwrap_or(false)
+            {
+                (self.sink)(ServerEvent::Disconnected);
+                self.running.store(false, Ordering::Relaxed);
+                break;
+            }
             thread::sleep(POLL_INTERVAL);
         }
     }
+}
+
+#[cfg(windows)]
+fn is_process_alive(pid: i64) -> bool {
+    use std::ffi::c_void;
+
+    const PROCESS_QUERY_LIMITED_INFORMATION: u32 = 0x1000;
+    const STILL_ACTIVE: u32 = 259;
+
+    #[link(name = "kernel32")]
+    extern "system" {
+        fn OpenProcess(access: u32, inherit_handle: i32, pid: u32) -> *mut c_void;
+        fn GetExitCodeProcess(process: *mut c_void, exit_code: *mut u32) -> i32;
+        fn CloseHandle(object: *mut c_void) -> i32;
+    }
+
+    if !(0..=u32::MAX as i64).contains(&pid) {
+        return false;
+    }
+    let process = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid as u32) };
+    if process.is_null() {
+        return false;
+    }
+    let mut exit_code = 0;
+    let readable = unsafe { GetExitCodeProcess(process, &mut exit_code) != 0 };
+    unsafe { CloseHandle(process) };
+    readable && exit_code == STILL_ACTIVE
+}
+
+#[cfg(unix)]
+fn is_process_alive(pid: i64) -> bool {
+    extern "C" {
+        fn kill(pid: i32, signal: i32) -> i32;
+    }
+
+    if pid <= 0 || pid > i32::MAX as i64 {
+        return false;
+    }
+    unsafe { kill(pid as i32, 0) == 0 }
+}
+
+#[cfg(not(any(unix, windows)))]
+fn is_process_alive(_pid: i64) -> bool {
+    true
 }
 
 fn drain_file(path: &Path, lock: &Path) -> Vec<String> {
@@ -226,5 +311,114 @@ mod tests {
             }
             other => panic!("unexpected reply: {other:?}"),
         }
+    }
+
+    #[test]
+    fn explicit_disconnect_emits_event() {
+        let dir = std::env::temp_dir().join(format!("wms_rust_disconnect_{}", std::process::id()));
+        let _ = fs::create_dir_all(&dir);
+
+        let events: Arc<Mutex<Vec<ServerEvent>>> = Arc::new(Mutex::new(Vec::new()));
+        let collected = Arc::clone(&events);
+        let transport = FileBufferTransport::start(
+            dir.clone(),
+            Arc::new(move |ev| collected.lock().unwrap().push(ev)),
+        );
+        transport.append(
+            "c2d",
+            "{\"type\":\"hello\"}\n{\"type\":\"disconnected\"}",
+        );
+
+        let deadline = Instant::now() + Duration::from_secs(1);
+        while Instant::now() < deadline
+            && !events
+                .lock()
+                .unwrap()
+                .iter()
+                .any(|event| matches!(event, ServerEvent::Disconnected))
+        {
+            thread::sleep(Duration::from_millis(10));
+        }
+
+        transport.stop();
+        let _ = fs::remove_dir_all(&dir);
+
+        assert!(events
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|event| matches!(event, ServerEvent::Disconnected)));
+    }
+
+    #[test]
+    fn start_ignores_frames_left_by_previous_session() {
+        let dir = std::env::temp_dir().join(format!(
+            "wms_rust_stale_session_{}",
+            std::process::id()
+        ));
+        let _ = fs::create_dir_all(&dir);
+        fs::write(
+            dir.join("c2d"),
+            b"{\"type\":\"hello\",\"pid\":1}\n{\"type\":\"disconnected\"}\n",
+        )
+        .unwrap();
+
+        let events: Arc<Mutex<Vec<ServerEvent>>> = Arc::new(Mutex::new(Vec::new()));
+        let collected = Arc::clone(&events);
+        let transport = FileBufferTransport::start(
+            dir.clone(),
+            Arc::new(move |ev| collected.lock().unwrap().push(ev)),
+        );
+
+        thread::sleep(Duration::from_millis(100));
+        transport.stop();
+        let _ = fs::remove_dir_all(&dir);
+
+        assert!(!events
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|event| matches!(event, ServerEvent::Disconnected)));
+    }
+
+    #[cfg(any(unix, windows))]
+    #[test]
+    fn dead_agent_pid_emits_disconnected() {
+        let dir = std::env::temp_dir().join(format!(
+            "wms_rust_dead_pid_{}",
+            std::process::id()
+        ));
+        let _ = fs::create_dir_all(&dir);
+
+        let events: Arc<Mutex<Vec<ServerEvent>>> = Arc::new(Mutex::new(Vec::new()));
+        let collected = Arc::clone(&events);
+        let transport = FileBufferTransport::start(
+            dir.clone(),
+            Arc::new(move |ev| collected.lock().unwrap().push(ev)),
+        );
+        transport.append(
+            "c2d",
+            &format!("{{\"type\":\"hello\",\"pid\":{}}}", i64::MAX),
+        );
+
+        let deadline = Instant::now() + Duration::from_secs(1);
+        while Instant::now() < deadline
+            && !events
+                .lock()
+                .unwrap()
+                .iter()
+                .any(|event| matches!(event, ServerEvent::Disconnected))
+        {
+            thread::sleep(Duration::from_millis(10));
+        }
+
+        transport.stop();
+        let _ = fs::remove_dir_all(&dir);
+
+        assert!(events
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|event| matches!(event, ServerEvent::Disconnected)));
     }
 }

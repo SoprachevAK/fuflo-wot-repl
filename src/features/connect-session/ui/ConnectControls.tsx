@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import type { GameInfo } from '@/shared/api'
 import { loadState } from '@/shared/lib'
 import { useSession } from '@/entities/session'
-import { connect, disconnect, reconnect } from '../model/connect'
+import { connect, disconnect } from '../model/connect'
 import { detectGames, pickGame, setupAndConnect, LAST_GAME_KEY } from '../model/setup'
 
 const BTN =
@@ -60,6 +60,14 @@ export function ConnectControls() {
     })
   }
 
+  if (busy) {
+    return (
+      <button type="button" onClick={() => void disconnect()} className={BTN}>
+        Cancel
+      </button>
+    )
+  }
+
   if (connected) {
     return (
       <button type="button" onClick={() => void disconnect()} className={BTN}>
@@ -95,7 +103,7 @@ export function ConnectControls() {
         disabled={!game || busy}
         className={`${BTN} border-live/40`}
       >
-        {busy ? 'Waiting for game…' : 'Set up & launch'}
+        {busy ? 'Waiting for game…' : 'Launch Game'}
       </button>
       <button
         type="button"
@@ -105,15 +113,6 @@ export function ConnectControls() {
         title="Connect to an already-running client"
       >
         Connect
-      </button>
-      <button
-        type="button"
-        onClick={() => void reconnect()}
-        disabled={busy}
-        className={BTN}
-        title="Reconnect to the last buffer directory"
-      >
-        Reconnect
       </button>
     </div>
   )

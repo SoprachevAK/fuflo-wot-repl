@@ -35,3 +35,16 @@ except Exception:
     import traceback
     print 'Fuflo WoT REPL: original bw_site load failed'
     print traceback.format_exc()
+
+# Preserve the game's shutdown hook while letting the agent tell the desktop
+# about a normal client exit before the original cleanup runs.
+_agent = globals().get('wms_agent')
+_original_fini = globals().get('fini')
+
+def fini():
+    try:
+        if _agent is not None:
+            _agent.stop()
+    finally:
+        if _original_fini is not None:
+            _original_fini()

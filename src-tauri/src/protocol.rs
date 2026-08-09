@@ -31,6 +31,7 @@ impl InFrame {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum OutFrame {
+    Disconnected,
     Hello {
         #[serde(default)]
         version: Option<String>,
@@ -82,7 +83,7 @@ impl OutFrame {
     /// The request id this frame answers, or `None` for async frames (stdout, hello).
     pub fn correlation_id(&self) -> Option<&str> {
         match self {
-            OutFrame::Hello { .. } | OutFrame::Stdout { .. } => None,
+            OutFrame::Disconnected | OutFrame::Hello { .. } | OutFrame::Stdout { .. } => None,
             OutFrame::Result { id, .. }
             | OutFrame::Complete { id, .. }
             | OutFrame::Inspect { id, .. }
@@ -126,4 +127,5 @@ pub struct LogLine {
 pub enum ServerEvent {
     Log { lines: Vec<LogLine> },
     Hello { version: Option<String>, pid: Option<i64> },
+    Disconnected,
 }

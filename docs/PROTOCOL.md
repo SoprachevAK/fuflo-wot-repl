@@ -30,6 +30,8 @@ per line.
 ```jsonc
 // continuous stream, no id
 { "type": "stdout", "stream": "stdout|stderr|log", "level": "INFO", "text": "...\n" }
+// shutdown, no id
+{ "type": "disconnected" }
 // correlated by id
 { "id": "<uuid>", "type": "result",  "ok": true, "repr": "<Avatar>", "exc": null }
 { "id": "<uuid>", "type": "complete", "candidates": [{"name":"player","source":"live"}] }
@@ -43,3 +45,8 @@ per line.
 `exec`, `complete`, `inspect`, `dump` run on the game **main thread** via
 `BigWorld.callback(0, ...)`. `lint` is pure and runs on the agent poll thread.
 Captured stdout/log is queued on the game thread and shipped by the poll thread.
+
+The `hello` frame contains the game process PID. The desktop checks that this
+process is still alive and emits `disconnected` when it exits. A normal `fini()`
+also sends `disconnected` immediately. Before the first `hello`, the desktop
+waits indefinitely for the game.

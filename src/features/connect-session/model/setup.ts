@@ -1,7 +1,7 @@
 import { api, pickFolder, type GameInfo } from '@/shared/api'
 import { saveState } from '@/shared/lib'
 import { consoleBus } from '@/entities/console'
-import { connect } from './connect'
+import { connect, disconnect } from './connect'
 
 export const LAST_GAME_KEY = 'lastGame'
 
@@ -40,9 +40,17 @@ export async function setupAndConnect(game: GameInfo, launch: boolean): Promise<
     consoleBus.system('agent installed\n')
     if (launch) {
       consoleBus.system(`launching ${game.exe}\n`)
-      await api.launchGame(game.path, game.exe)
     }
-    await connect(buffer)
+    const connection = connect(buffer)
+    if (launch) {
+      try {
+        await api.launchGame(game.path, game.exe)
+      } catch (error) {
+        await disconnect()
+        throw error
+      }
+    }
+    await connection
   } catch (error) {
     consoleBus.system(`setup failed: ${String(error)}\n`)
   }
