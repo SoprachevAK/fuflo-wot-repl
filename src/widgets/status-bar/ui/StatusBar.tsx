@@ -10,7 +10,7 @@ export function StatusBar() {
   const agentPid = useSession((s) => s.agentPid)
 
   return (
-    <footer className="flex h-7 shrink-0 items-center justify-between border-t border-edge bg-panel px-3 text-[11px] text-muted">
+    <footer className="flex h-7 shrink-0 select-none items-center justify-between border-t border-edge bg-panel px-3 text-[11px] text-muted">
       <div className="flex items-center gap-3">
         <ConnectionBadge />
         {bufferDir && (

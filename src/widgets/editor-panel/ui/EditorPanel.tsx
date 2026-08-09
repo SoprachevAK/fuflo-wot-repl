@@ -121,7 +121,7 @@ export function EditorPanel() {
   return (
     <Panel
       title="Editor"
-      className="flex-1 border-r border-edge"
+      className="w-full"
       actions={
         <HeaderButton
           onClick={() => runEditor(editorRef.current)}
