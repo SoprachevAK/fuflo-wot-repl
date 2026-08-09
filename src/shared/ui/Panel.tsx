@@ -9,7 +9,7 @@ interface PanelProps {
 
 export function Panel({ title, actions, children, className = '' }: PanelProps) {
   return (
-    <section className={`flex min-w-0 flex-col bg-panel ${className}`}>
+    <section className={`flex min-h-0 min-w-0 flex-col bg-panel ${className}`}>
       <header className="flex h-8 shrink-0 items-center justify-between border-b border-edge px-3">
         <span className="min-w-0 truncate select-none text-[11px] font-medium tracking-wider text-muted uppercase">
           {title}
