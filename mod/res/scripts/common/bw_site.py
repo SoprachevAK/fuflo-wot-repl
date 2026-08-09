@@ -1,4 +1,4 @@
-# Fuflo WoT REPL early loader (Python 2.7 / BigWorld) -- GENERATED into the mod.
+# Fuflo WoT REPL early loader (Python 2.7 / BigWorld).
 #
 # Installed as scripts/common/bw_site.py via the .mtmod res overlay, so it loads
 # at site-init time (the earliest point, like PJOrion) and its stdout/BigWorld.log

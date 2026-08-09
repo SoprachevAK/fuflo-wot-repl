@@ -1,4 +1,4 @@
-//! Wire frames shared with the in-game agent (see agent/PROTOCOL.md) and the
+//! Wire frames shared with the in-game agent (see docs/PROTOCOL.md) and the
 //! events streamed to the frontend over a Tauri channel.
 
 use serde::{Deserialize, Serialize};

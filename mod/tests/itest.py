@@ -10,7 +10,8 @@ import time
 import shutil
 import tempfile
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.abspath(os.path.join(
+    os.path.dirname(__file__), '..', 'res', 'scripts', 'common')))
 
 from wms_agent.framebus import FrameBus
 import wms_agent
@@ -27,11 +28,15 @@ def main():
 
         results = {}
         stdout_text = ""
+        hello = None
         deadline = time.time() + 3.0
-        while time.time() < deadline and not ("2" in results and "hello" in stdout_text):
+        while time.time() < deadline and not (
+                "2" in results and "hello" in stdout_text and hello):
             for frame in desktop.drain():
                 if frame.get("type") == "stdout":
                     stdout_text += frame.get("text", "")
+                elif frame.get("type") == "hello":
+                    hello = frame
                 elif frame.get("id"):
                     results[frame["id"]] = frame
             time.sleep(0.02)
@@ -40,6 +45,7 @@ def main():
 
         assert results.get("2", {}).get("repr") == "84", results
         assert "hello" in stdout_text, repr(stdout_text)
+        assert hello.get("version") == wms_agent.__version__, hello
 
         print("ITEST OK  ns-persist x*2=%s  captured=%r"
               % (results["2"]["repr"], stdout_text.strip()))

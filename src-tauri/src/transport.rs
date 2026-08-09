@@ -184,7 +184,7 @@ mod tests {
                 return;
             }
         };
-        let runner = concat!(env!("CARGO_MANIFEST_DIR"), "/../agent/run_standalone.py");
+        let runner = concat!(env!("CARGO_MANIFEST_DIR"), "/../mod/tests/run_standalone.py");
         let dir = std::env::temp_dir().join(format!("wms_rust_it_{}", std::process::id()));
         let _ = fs::create_dir_all(&dir);
 

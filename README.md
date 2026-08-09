@@ -9,7 +9,7 @@ running game client**, with code completion and linting that no existing tool
 > is against WG ToS and detectable; hiding that is explicitly out of scope.
 
 See [`docs/PLAN.md`](docs/PLAN.md) for the full design and
-[`agent/PROTOCOL.md`](agent/PROTOCOL.md) for the wire protocol.
+[`docs/PROTOCOL.md`](docs/PROTOCOL.md) for the wire protocol.
 
 ## Architecture
 
@@ -38,7 +38,7 @@ offline) merged with dynamic runtime introspection from the live game.
 |---|---|
 | `src/` | FSD frontend (`app` / `pages` / `widgets` / `features` / `entities` / `shared`) |
 | `src-tauri/` | Rust backend (protocol, transport, jedi supervisor, commands) |
-| `agent/` | in-game py2.7 agent + `bw_site` loader + packager |
+| `mod/` | `.mtmod` source tree, Python 2.7 builder, and agent tests |
 | `tools/jedi_worker/` | CPython 2.7 jedi static worker (stdio JSON) |
 | `docs/PLAN.md` | full implementation plan |
 
@@ -54,23 +54,23 @@ offline) merged with dynamic runtime introspection from the live game.
 
 ```sh
 npm install
-npm run tauri dev      # launches the desktop app
+npm run dev            # frontend development server
 npm run build          # tsc + vite production build
 npm run lint:fsd       # steiger FSD boundary check
-cargo check --manifest-path src-tauri/Cargo.toml
 ```
 
-## Wire up the game side
+## Build for Windows
 
-```sh
-# render the loader + zip the agent
-python agent/build_wotmod.py --out dist-agent --buffer-dir "C:/wms-buffer"
-# copy dist-agent/bw_site.py into the client's scripts/common/, then launch WoT.
+```powershell
+.\build-windows.ps1
+.\build-windows.ps1 -Version v0.5.0
 ```
 
-In the app, set the **shared buffer directory** to the same path and click
-**Connect**. The console streams the game's stdout/log; `Ctrl/Cmd+Enter` runs the
-editor selection in the live client.
+Without `-Version`, the version comes from `package.json`; an explicit version
+may include the Git tag's `v` prefix. The same version is used for the `.mtmod`
+and Tauri installers. The script also runs the Python 2.7 agent and Rust tests,
+checks FSD boundaries, and produces the final Windows installers. The release
+workflow calls the same script from a clean checkout.
 
 ## Status
 
@@ -84,6 +84,6 @@ editor selection in the live client.
 | M5 polish | command palette, connect controls, design system |
 
 Verified without a game: frontend `tsc`+`vite` build, `cargo check`, steiger FSD
-check, agent unit + integration tests (`agent/selftest.py`, `agent/itest.py`), jedi
+check, agent unit + integration tests (`mod/tests/selftest.py`, `mod/tests/itest.py`), jedi
 worker protocol. **Needs a live WoT client** to validate `BigWorld.callback`
 main-thread marshaling, the real log volume, and end-to-end injection.
