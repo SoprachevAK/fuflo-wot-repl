@@ -38,7 +38,7 @@ offline) merged with dynamic runtime introspection from the live game.
 |---|---|
 | `src/` | FSD frontend (`app` / `pages` / `widgets` / `features` / `entities` / `shared`) |
 | `src-tauri/` | Rust backend (protocol, transport, jedi supervisor, commands) |
-| `mod/` | `.mtmod` source tree, Python 2.7 builder, and agent tests |
+| `mod/` | universal `.mod` source tree, Python 2.7 builder, and agent tests |
 | `tools/jedi_worker/` | CPython 2.7 jedi static worker (stdio JSON) |
 | `docs/PLAN.md` | full implementation plan |
 
@@ -67,7 +67,7 @@ npm run lint:fsd       # steiger FSD boundary check
 ```
 
 Without `-Version`, the version comes from `package.json`; an explicit version
-may include the Git tag's `v` prefix. The same version is used for the `.mtmod`
+may include the Git tag's `v` prefix. The same version is used for the universal `.mod`
 and Tauri installers. The script also runs the Python 2.7 agent and Rust tests,
 checks FSD boundaries, and produces the final Windows installers. The release
 workflow calls the same script from a clean checkout.

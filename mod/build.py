@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Compile the Python 2.7 game agent and package it as an .mtmod archive."""
+"""Compile the Python 2.7 game agent and package it as a universal .mod archive."""
 
 import argparse
 import os
@@ -105,7 +105,7 @@ def _verify(output, version):
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Build the Fuflo WoT REPL .mtmod')
+    parser = argparse.ArgumentParser(description='Build the universal Fuflo WoT REPL .mod')
     parser.add_argument('--version', required=True)
     parser.add_argument('--out', required=True)
     args = parser.parse_args()

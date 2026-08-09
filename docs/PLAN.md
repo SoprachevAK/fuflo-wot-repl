@@ -183,7 +183,7 @@ channels, and **main-thread marshaling** (PJOrion exec's on its daemon thread, w
 crash the client when touching render/entity objects).
 
 ```
-mod/res/scripts/common (pure py2.7 stdlib only, shipped as .mtmod)
+mod/res/scripts/common (pure py2.7 stdlib only, shipped as a universal .mod)
   bw_site.py          # early loader (see injection below)
   wms_agent/__init__.py
   wms_agent/framebus.py  # buffer + file-mutex, newline-delimited JSON frames
@@ -304,7 +304,7 @@ overused VS-Code blue or any banned warm-premium palette.
 | FSD lint | steiger + @feature-sliced/steiger-plugin, eslint-plugin-boundaries | |
 | Rust | notify, serde/serde_json, tokio, uuid, tauri-plugin-shell | |
 | Static worker | CPython 2.7 + jedi==0.17.2 + parso 0.7.x + pyflakes (py2) | **last py2 jedi** |
-| In-game agent | pure py2.7 stdlib only | shipped as .mtmod |
+| In-game agent | pure py2.7 stdlib only | shipped as a universal .mod |
 
 ---
 
@@ -317,7 +317,7 @@ overused VS-Code blue or any banned warm-premium palette.
 | M2 | exec round-trip | orion_buffer + main-thread runner; Monaco + Cmd+Enter; result rendered by id | M1 |
 | M3 | static completion+lint | py2.7 jedi 0.17.2 worker over wot-src; Monaco completion + markers (parso/pyflakes + compile) | M2 |
 | M4 | dynamic layer | complete/inspect/stubgen via agent; merge `live` candidates; native `.pyi` generated | M3 |
-| M5 | polish | command palette, settings (dirs), reconnect UX, .mtmod build + installer | M4 |
+| M5 | polish | command palette, settings (dirs), reconnect UX, universal .mod build + installer | M4 |
 
 M1 is the "see the game's stdout in the window" goal and is the first proof the whole
 transport works end to end.

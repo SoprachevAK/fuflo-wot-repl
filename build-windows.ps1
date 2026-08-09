@@ -27,7 +27,7 @@ try {
         if ($LASTEXITCODE -ne 0) { throw 'npm dependency install failed' }
     }
 
-    $mod = 'src-tauri/resources/me.fuflo.wotrepl.mtmod'
+    $mod = 'src-tauri/resources/me.fuflo.wotrepl.mod'
     Remove-Item $mod -Force -ErrorAction SilentlyContinue
 
     foreach ($test in @('selftest.py', 'itest.py', 'test_complete.py', 'test_dump.py')) {
