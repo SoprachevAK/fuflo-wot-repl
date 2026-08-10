@@ -33,6 +33,7 @@ export function ConnectControls() {
   const [games, setGames] = useState<GameInfo[]>([])
   const [selected, setSelected] = useState(0)
   const [replays, setReplays] = useState(recentReplays)
+  const gameMenu = useRef<HTMLDetailsElement>(null)
   const replayMenu = useRef<HTMLDetailsElement>(null)
 
   useEffect(() => {
@@ -54,12 +55,13 @@ export function ConnectControls() {
   }, [])
 
   useEffect(() => {
-    const closeReplayMenu = (event: PointerEvent) => {
-      const menu = replayMenu.current
-      if (menu?.open && !menu.contains(event.target as Node)) menu.open = false
+    const closeMenus = (event: PointerEvent) => {
+      for (const menu of [gameMenu.current, replayMenu.current]) {
+        if (menu?.open && !menu.contains(event.target as Node)) menu.open = false
+      }
     }
-    document.addEventListener('pointerdown', closeReplayMenu)
-    return () => document.removeEventListener('pointerdown', closeReplayMenu)
+    document.addEventListener('pointerdown', closeMenus)
+    return () => document.removeEventListener('pointerdown', closeMenus)
   }, [])
 
   const connected = status === 'connected'
@@ -114,30 +116,48 @@ export function ConnectControls() {
   return (
     <div className="flex items-center gap-2">
       {games.length > 0 ? (
-        <select
-          value={selected}
-          onChange={(e) => setSelected(Number(e.target.value))}
-          className="h-7 max-w-72 rounded border border-edge bg-elevated px-2 text-[12px] text-fg outline-none focus:border-live"
-        >
-          {games.map((g, i) => (
-            <option key={g.path} value={i}>
-              {g.path.split(/[\\/]/).pop()} · {g.version}
-              {g.installed ? ' · installed' : ''}
-            </option>
-          ))}
-        </select>
+        <details ref={gameMenu} className="relative z-30">
+          <summary className="flex h-7 max-w-72 cursor-pointer list-none items-center gap-2 rounded border border-edge bg-elevated px-2 text-[12px] text-fg transition-colors hover:border-live [&::-webkit-details-marker]:hidden">
+            <span className="min-w-0 truncate">
+              {game?.path.split(/[\\/]/).pop()} · {game?.version}
+              {game?.installed ? ' · installed' : ''}
+            </span>
+            <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" className="h-3 w-3 shrink-0 stroke-current">
+              <path d="m2.5 5 5.5 5.5L13.5 5" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </summary>
+          <div className="absolute left-0 top-8 w-72 rounded border border-edge bg-elevated p-1 shadow-lg">
+            <div className="px-2 py-1.5 text-[11px] font-medium text-muted">Select Game</div>
+            {games.map((candidate, index) => (
+              <button
+                key={candidate.path}
+                type="button"
+                title={candidate.path}
+                aria-current={index === selected}
+                onClick={() => {
+                  setSelected(index)
+                  if (gameMenu.current) gameMenu.current.open = false
+                }}
+                className={`block w-full truncate rounded px-2 py-1.5 text-left text-[11px] hover:bg-panel ${index === selected ? 'bg-panel text-live' : 'text-fg'}`}
+              >
+                {candidate.path.split(/[\\/]/).pop()} · {candidate.version}
+                {candidate.installed ? ' · installed' : ''}
+              </button>
+            ))}
+          </div>
+        </details>
       ) : (
         <span className="text-[12px] text-faint">no client detected</span>
       )}
       <button type="button" onClick={() => void onBrowse()} disabled={busy} className={BTN} title="Pick the game folder manually">
         Browse…
       </button>
-      <div className="flex items-center">
+      <div className="flex items-center [&:has(summary:hover)>button]:border-r-live">
         <button
           type="button"
           onClick={() => game && void setupAndConnect(game, true)}
           disabled={!game || busy}
-          className={`${BTN} rounded-r-none border-r-0 border-live/40`}
+          className={`${BTN} rounded-r-none border-live/40`}
         >
           {busy ? 'Waiting for game…' : 'Launch Game'}
         </button>
@@ -147,7 +167,7 @@ export function ConnectControls() {
             aria-label="Launch replay"
             aria-disabled={!game || busy}
             tabIndex={!game || busy ? -1 : 0}
-            className={`flex h-7 w-7 cursor-pointer list-none items-center justify-center rounded rounded-l-none border border-live/40 text-fg transition-colors hover:border-live [&::-webkit-details-marker]:hidden ${!game || busy ? 'pointer-events-none opacity-40' : ''}`}
+            className={`flex h-7 w-7 cursor-pointer list-none items-center justify-center rounded rounded-l-none border border-l-0 border-live/40 text-fg transition-colors hover:border-live [&::-webkit-details-marker]:hidden ${!game || busy ? 'pointer-events-none opacity-40' : ''}`}
           >
             <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" className="h-3 w-3 mt-0.5 stroke-current">
               <path d="m2.5 5 5.5 5.5L13.5 5" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
