@@ -16,7 +16,7 @@ export function Panel({ title, actions, children, className = '' }: PanelProps) 
         </span>
         {actions}
       </header>
-      <div className="min-h-0 flex-1 overflow-auto">{children}</div>
+      <div className="min-h-0 flex-1 overflow-hidden">{children}</div>
     </section>
   )
 }
