@@ -242,21 +242,42 @@ pub fn install_agent(game_dir: &str, mods_version: &str) -> Result<String, Strin
     Ok(buffer.to_string_lossy().into_owned())
 }
 
-pub fn launch_game(game_dir: &str, exe: &str) -> Result<(), String> {
+fn replay_extension(exe: &str) -> &'static str {
+    if exe.eq_ignore_ascii_case("Tanki.exe") {
+        "mtreplay"
+    } else {
+        "wotreplay"
+    }
+}
+
+pub fn launch_game(game_dir: &str, exe: &str, replay: Option<&str>) -> Result<(), String> {
     let exe_path = PathBuf::from(game_dir).join(exe);
     if !exe_path.is_file() {
         return Err(format!("launcher not found: {}", exe_path.display()));
     }
-    Command::new(&exe_path)
-        .current_dir(game_dir)
-        .spawn()
-        .map_err(|e| e.to_string())?;
+    let mut command = Command::new(&exe_path);
+    command.current_dir(game_dir);
+    if let Some(replay) = replay {
+        let replay_path = Path::new(replay);
+        if !replay_path.is_file() {
+            return Err(format!("replay not found: {}", replay_path.display()));
+        }
+        let valid_extension = replay_path
+            .extension()
+            .and_then(|value| value.to_str())
+            .is_some_and(|value| value.eq_ignore_ascii_case(replay_extension(exe)));
+        if !valid_extension {
+            return Err(format!("expected a .{} replay", replay_extension(exe)));
+        }
+        command.arg(replay_path);
+    }
+    command.spawn().map_err(|e| e.to_string())?;
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{mod_name_for_exe, MTMOD_NAME, WOTMOD_NAME};
+    use super::{mod_name_for_exe, replay_extension, MTMOD_NAME, WOTMOD_NAME};
 
     #[test]
     fn picks_the_game_mod_extension() {
@@ -264,5 +285,11 @@ mod tests {
         for exe in ["WorldOfTanks.exe", "WoT.exe", "wot.exe"] {
             assert_eq!(mod_name_for_exe(exe), WOTMOD_NAME);
         }
+    }
+
+    #[test]
+    fn picks_the_game_replay_extension() {
+        assert_eq!(replay_extension("Tanki.exe"), "mtreplay");
+        assert_eq!(replay_extension("WorldOfTanks.exe"), "wotreplay");
     }
 }

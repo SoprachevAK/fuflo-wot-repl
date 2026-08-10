@@ -25,8 +25,8 @@ export const api = {
   inspectGameDir: (dir: string) => invoke<GameInfo | null>('inspect_game_dir', { dir }),
   installAgent: (gameDir: string, modsVersion: string) =>
     invoke<string>('install_agent', { gameDir, modsVersion }),
-  launchGame: (gameDir: string, exe: string) =>
-    invoke<void>('launch_game', { gameDir, exe }),
+  launchGame: (gameDir: string, exe: string, replay?: string) =>
+    invoke<void>('launch_game', { gameDir, exe, replay }),
 
   connect: (bufferDir: string, onEvent: Channel<ServerEvent>) =>
     invoke<void>('connect', { bufferDir, onEvent }),

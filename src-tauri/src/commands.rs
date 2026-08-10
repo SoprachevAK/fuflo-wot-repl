@@ -116,8 +116,8 @@ pub fn install_agent(game_dir: String, mods_version: String) -> Result<String, S
 }
 
 #[tauri::command]
-pub fn launch_game(game_dir: String, exe: String) -> Result<(), String> {
-    install::launch_game(&game_dir, &exe)
+pub fn launch_game(game_dir: String, exe: String, replay: Option<String>) -> Result<(), String> {
+    install::launch_game(&game_dir, &exe, replay.as_deref())
 }
 
 // --- Session ------------------------------------------------------------------
