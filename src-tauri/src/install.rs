@@ -35,7 +35,7 @@ pub struct GameInfo {
     pub installed: bool,
 }
 
-fn app_data_root() -> PathBuf {
+pub(crate) fn app_data_root() -> PathBuf {
     let base = std::env::var("LOCALAPPDATA")
         .or_else(|_| std::env::var("APPDATA"))
         .unwrap_or_else(|_| ".".to_string());
@@ -250,7 +250,7 @@ fn replay_extension(exe: &str) -> &'static str {
     }
 }
 
-pub fn launch_game(game_dir: &str, exe: &str, replay: Option<&str>) -> Result<(), String> {
+pub fn launch_game(game_dir: &str, exe: &str, replay: Option<&str>) -> Result<u32, String> {
     let exe_path = PathBuf::from(game_dir).join(exe);
     if !exe_path.is_file() {
         return Err(format!("launcher not found: {}", exe_path.display()));
@@ -271,8 +271,10 @@ pub fn launch_game(game_dir: &str, exe: &str, replay: Option<&str>) -> Result<()
         }
         command.arg(replay_path);
     }
-    command.spawn().map_err(|e| e.to_string())?;
-    Ok(())
+    command
+        .spawn()
+        .map(|child| child.id())
+        .map_err(|e| e.to_string())
 }
 
 #[cfg(test)]

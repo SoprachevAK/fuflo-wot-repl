@@ -38,12 +38,17 @@ how many live candidates are inspected for kind, documentation, and signatures.
 // shutdown, no id
 { "type": "disconnected" }
 // correlated by id
-{ "id": "<uuid>", "type": "result",  "ok": true, "repr": "<Avatar>", "exc": null }
+{ "id": "<uuid>", "type": "result",  "ok": true, "repr": "<Avatar>", "exc": null, "stdout": "printed output\n", "stderr": "" }
 { "id": "<uuid>", "type": "complete", "candidates": [{"name":"player","source":"live"}] }
 { "id": "<uuid>", "type": "inspect",  "signature": "player()", "doc": "..." }
 { "id": "<uuid>", "type": "lint",     "diagnostics": [{"line":1,"col":1,"severity":"error","message":"..."}] }
 { "id": "<uuid>", "type": "dump",     "roots": [ ... ], "errors": [ ... ], "stubs": { "Avatar": "<.pyi text>" } }
 ```
+
+`result.stdout` and `result.stderr` contain output correlated to that `exec`
+request while the same writes continue through the global stdout/log stream. The
+desktop accepts older result frames that omit either field and deserializes the
+missing value as an empty string.
 
 ## Threading
 

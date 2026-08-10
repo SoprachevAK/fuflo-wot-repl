@@ -17,6 +17,7 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime};
 
+use crate::process::is_process_alive;
 use crate::protocol::{InFrame, LogLine, OutFrame, ServerEvent};
 
 const LOCK_STALE: Duration = Duration::from_secs(5);
@@ -54,10 +55,7 @@ impl FileBufferTransport {
     pub fn request(&self, frame: InFrame) -> Receiver<OutFrame> {
         let (tx, rx) = mpsc::channel();
         let id = frame.id().expect("control frames cannot be requested");
-        self.pending
-            .lock()
-            .unwrap()
-            .insert(id.to_string(), tx);
+        self.pending.lock().unwrap().insert(id.to_string(), tx);
         self.send(frame);
         rx
     }
@@ -143,10 +141,7 @@ impl FileBufferTransport {
                 self.running.store(false, Ordering::Relaxed);
                 break;
             }
-            if game_pid
-                .map(|pid| !is_process_alive(pid))
-                .unwrap_or(false)
-            {
+            if game_pid.map(|pid| !is_process_alive(pid)).unwrap_or(false) {
                 (self.sink)(ServerEvent::Disconnected);
                 self.running.store(false, Ordering::Relaxed);
                 break;
@@ -154,50 +149,6 @@ impl FileBufferTransport {
             thread::sleep(POLL_INTERVAL);
         }
     }
-}
-
-#[cfg(windows)]
-fn is_process_alive(pid: i64) -> bool {
-    use std::ffi::c_void;
-
-    const PROCESS_QUERY_LIMITED_INFORMATION: u32 = 0x1000;
-    const STILL_ACTIVE: u32 = 259;
-
-    #[link(name = "kernel32")]
-    extern "system" {
-        fn OpenProcess(access: u32, inherit_handle: i32, pid: u32) -> *mut c_void;
-        fn GetExitCodeProcess(process: *mut c_void, exit_code: *mut u32) -> i32;
-        fn CloseHandle(object: *mut c_void) -> i32;
-    }
-
-    if !(0..=u32::MAX as i64).contains(&pid) {
-        return false;
-    }
-    let process = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid as u32) };
-    if process.is_null() {
-        return false;
-    }
-    let mut exit_code = 0;
-    let readable = unsafe { GetExitCodeProcess(process, &mut exit_code) != 0 };
-    unsafe { CloseHandle(process) };
-    readable && exit_code == STILL_ACTIVE
-}
-
-#[cfg(unix)]
-fn is_process_alive(pid: i64) -> bool {
-    extern "C" {
-        fn kill(pid: i32, signal: i32) -> i32;
-    }
-
-    if pid <= 0 || pid > i32::MAX as i64 {
-        return false;
-    }
-    unsafe { kill(pid as i32, 0) == 0 }
-}
-
-#[cfg(not(any(unix, windows)))]
-fn is_process_alive(_pid: i64) -> bool {
-    true
 }
 
 fn drain_file(path: &Path, lock: &Path) -> Vec<String> {
@@ -272,7 +223,10 @@ mod tests {
                 return;
             }
         };
-        let runner = concat!(env!("CARGO_MANIFEST_DIR"), "/../mod/tests/run_standalone.py");
+        let runner = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../mod/tests/run_standalone.py"
+        );
         let dir = std::env::temp_dir().join(format!("wms_rust_it_{}", std::process::id()));
         let _ = fs::create_dir_all(&dir);
 
@@ -292,7 +246,7 @@ mod tests {
 
         let rx = transport.request(InFrame::Exec {
             id: "t1".into(),
-            code: "21 * 2".into(),
+            code: "(__import__('sys').stdout.write('out'), __import__('sys').stderr.write('err'), 21 * 2)[-1]".into(),
         });
         let frame = rx.recv_timeout(Duration::from_secs(10));
 
@@ -308,9 +262,17 @@ mod tests {
 
         assert!(got_hello, "agent should send a hello handshake on start");
         match frame {
-            Ok(OutFrame::Result { repr, ok, .. }) => {
+            Ok(OutFrame::Result {
+                repr,
+                ok,
+                stdout,
+                stderr,
+                ..
+            }) => {
                 assert!(ok, "exec should succeed");
                 assert_eq!(repr.as_deref(), Some("42"));
+                assert_eq!(stdout, "out");
+                assert_eq!(stderr, "err");
             }
             other => panic!("unexpected reply: {other:?}"),
         }
@@ -319,10 +281,8 @@ mod tests {
     #[cfg(any(unix, windows))]
     #[test]
     fn attaches_to_agent_that_sent_hello_before_transport_started() {
-        let dir = std::env::temp_dir().join(format!(
-            "wms_rust_preconnected_{}",
-            std::process::id()
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("wms_rust_preconnected_{}", std::process::id()));
         let _ = fs::create_dir_all(&dir);
         fs::write(
             dir.join("c2d"),
@@ -356,17 +316,13 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
 
         assert!(desktop_handshake.contains("{\"type\":\"hello\"}"));
-        assert!(events
-            .lock()
-            .unwrap()
-            .iter()
-            .any(|event| matches!(
-                event,
-                ServerEvent::Hello {
-                    version: Some(version),
-                    pid: Some(pid),
-                } if version == "test" && *pid == std::process::id() as i64
-            )));
+        assert!(events.lock().unwrap().iter().any(|event| matches!(
+            event,
+            ServerEvent::Hello {
+                version: Some(version),
+                pid: Some(pid),
+            } if version == "test" && *pid == std::process::id() as i64
+        )));
     }
 
     #[test]
@@ -380,10 +336,7 @@ mod tests {
             dir.clone(),
             Arc::new(move |ev| collected.lock().unwrap().push(ev)),
         );
-        transport.append(
-            "c2d",
-            "{\"type\":\"hello\"}\n{\"type\":\"disconnected\"}",
-        );
+        transport.append("c2d", "{\"type\":\"hello\"}\n{\"type\":\"disconnected\"}");
 
         let deadline = Instant::now() + Duration::from_secs(1);
         while Instant::now() < deadline
@@ -408,16 +361,10 @@ mod tests {
 
     #[test]
     fn start_ignores_disconnect_without_handshake() {
-        let dir = std::env::temp_dir().join(format!(
-            "wms_rust_stale_session_{}",
-            std::process::id()
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("wms_rust_stale_session_{}", std::process::id()));
         let _ = fs::create_dir_all(&dir);
-        fs::write(
-            dir.join("c2d"),
-            b"{\"type\":\"disconnected\"}\n",
-        )
-        .unwrap();
+        fs::write(dir.join("c2d"), b"{\"type\":\"disconnected\"}\n").unwrap();
 
         let events: Arc<Mutex<Vec<ServerEvent>>> = Arc::new(Mutex::new(Vec::new()));
         let collected = Arc::clone(&events);
@@ -440,10 +387,7 @@ mod tests {
     #[cfg(any(unix, windows))]
     #[test]
     fn dead_agent_pid_emits_disconnected() {
-        let dir = std::env::temp_dir().join(format!(
-            "wms_rust_dead_pid_{}",
-            std::process::id()
-        ));
+        let dir = std::env::temp_dir().join(format!("wms_rust_dead_pid_{}", std::process::id()));
         let _ = fs::create_dir_all(&dir);
 
         let events: Arc<Mutex<Vec<ServerEvent>>> = Arc::new(Mutex::new(Vec::new()));

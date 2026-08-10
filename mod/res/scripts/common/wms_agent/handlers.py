@@ -32,11 +32,61 @@ def handle_hello(req):
     return {'type': 'hello', 'version': __version__, 'pid': os.getpid()}
 
 
+class _ExecTee(object):
+    """Best-effort capture; sys streams are process-global, not thread-local."""
+
+    def __init__(self, original):
+        self._original = original
+        self._parts = []
+
+    def write(self, text):
+        try:
+            string_types = (basestring,)
+        except NameError:
+            string_types = (str,)
+        if not isinstance(text, string_types):
+            raise TypeError('write() argument must be a string')
+        result = None
+        if self._original is not None:
+            result = self._original.write(text)
+        self._parts.append(text)
+        return result
+
+    def flush(self):
+        if self._original is not None:
+            return self._original.flush()
+
+    def getvalue(self):
+        try:
+            return ''.join(self._parts)
+        except (TypeError, UnicodeError):
+            try:
+                text_type = unicode
+            except NameError:
+                text_type = str
+            parts = []
+            for part in self._parts:
+                if isinstance(part, text_type):
+                    parts.append(part)
+                else:
+                    parts.append(part.decode('utf-8', 'replace'))
+            return u''.join(parts)
+
+    def __getattr__(self, name):
+        return getattr(self._original, name)
+
+
 def handle_exec(req):
     code = req.get('code', '')
     ns = _ns()
     out = {'id': req.get('id'), 'type': 'result', 'ok': True,
-           'repr': None, 'exc': None}
+           'repr': None, 'exc': None, 'stdout': '', 'stderr': ''}
+    saved_out = sys.stdout
+    saved_err = sys.stderr
+    captured_out = _ExecTee(saved_out)
+    captured_err = _ExecTee(saved_err)
+    sys.stdout = captured_out
+    sys.stderr = captured_err
     try:
         try:
             compiled = compile(code, '<repl>', 'eval')
@@ -48,6 +98,11 @@ def handle_exec(req):
     except BaseException:
         out['ok'] = False
         out['exc'] = traceback.format_exc()
+    finally:
+        sys.stdout = saved_out
+        sys.stderr = saved_err
+        out['stdout'] = captured_out.getvalue()
+        out['stderr'] = captured_err.getvalue()
     return out
 
 

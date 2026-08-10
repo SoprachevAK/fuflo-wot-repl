@@ -1,5 +1,6 @@
 import { ConnectionBadge, useSession } from '@/entities/session'
 import { useEditorCursor } from '@/entities/editor'
+import { McpControl } from '@/features/manage-mcp'
 
 export function StatusBar() {
   const line = useEditorCursor((s) => s.line)
@@ -25,9 +26,12 @@ export function StatusBar() {
         )}
         <span className="text-faint">jedi: idle</span>
       </div>
-      <span className="text-faint">
-        Ln {line}, Col {column}
-      </span>
+      <div className="flex items-center gap-3">
+        <McpControl />
+        <span className="text-faint">
+          Ln {line}, Col {column}
+        </span>
+      </div>
     </footer>
   )
 }

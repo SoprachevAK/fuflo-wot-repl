@@ -9,15 +9,28 @@ use std::collections::HashMap;
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum InFrame {
     Hello,
-    Exec { id: String, code: String },
+    Exec {
+        id: String,
+        code: String,
+    },
     Complete {
         id: String,
         prefix: String,
         budget: u32,
     },
-    Inspect { id: String, expr: String },
-    Lint { id: String, code: String },
-    Dump { id: String, expr: String, depth: u32 },
+    Inspect {
+        id: String,
+        expr: String,
+    },
+    Lint {
+        id: String,
+        code: String,
+    },
+    Dump {
+        id: String,
+        expr: String,
+        depth: u32,
+    },
 }
 
 impl InFrame {
@@ -58,6 +71,10 @@ pub enum OutFrame {
         repr: Option<String>,
         #[serde(default)]
         exc: Option<String>,
+        #[serde(default)]
+        stdout: String,
+        #[serde(default)]
+        stderr: String,
     },
     Complete {
         id: String,
@@ -131,7 +148,38 @@ pub struct LogLine {
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum ServerEvent {
-    Log { lines: Vec<LogLine> },
-    Hello { version: Option<String>, pid: Option<i64> },
+    Log {
+        lines: Vec<LogLine>,
+    },
+    Hello {
+        version: Option<String>,
+        pid: Option<i64>,
+    },
     Disconnected,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn result_output_is_backward_compatible() {
+        let old: OutFrame = serde_json::from_str(
+            r#"{"type":"result","id":"old","ok":true,"repr":"42","exc":null}"#,
+        )
+        .unwrap();
+        let new: OutFrame = serde_json::from_str(
+            r#"{"type":"result","id":"new","ok":true,"stdout":"out","stderr":"err"}"#,
+        )
+        .unwrap();
+
+        assert!(matches!(
+            old,
+            OutFrame::Result { stdout, stderr, .. } if stdout.is_empty() && stderr.is_empty()
+        ));
+        assert!(matches!(
+            new,
+            OutFrame::Result { stdout, stderr, .. } if stdout == "out" && stderr == "err"
+        ));
+    }
 }
