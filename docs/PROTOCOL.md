@@ -18,6 +18,8 @@ per line.
 ## Desktop -> game (`d2c`)
 
 ```jsonc
+// request/repeat the agent handshake (used when reconnecting)
+{ "type": "hello" }
 { "id": "<uuid>", "type": "exec",    "code": "player = BigWorld.player()" }
 { "id": "<uuid>", "type": "complete","prefix": "BigWorld.pla", "budget": 120 }
 { "id": "<uuid>", "type": "inspect", "expr": "BigWorld.player()" }
@@ -49,7 +51,9 @@ how many live candidates are inspected for kind, documentation, and signatures.
 `BigWorld.callback(0, ...)`. `lint` is pure and runs on the agent poll thread.
 Captured stdout/log is queued on the game thread and shipped by the poll thread.
 
-The `hello` frame contains the game process PID. The desktop checks that this
-process is still alive and emits `disconnected` when it exits. A normal `fini()`
-also sends `disconnected` immediately. Before the first `hello`, the desktop
-waits indefinitely for the game.
+The agent sends `hello` on startup and responds to the desktop's `hello` request,
+so a desktop reconnect does not depend on the original startup frame still being
+in the buffer. The frame contains the game process PID. The desktop checks that
+this process is still alive and emits `disconnected` when it exits. A normal
+`fini()` also sends `disconnected` immediately. Before the first `hello`, the
+desktop waits indefinitely for the game.

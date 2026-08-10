@@ -42,6 +42,18 @@ def main():
                     results[frame["id"]] = frame
             time.sleep(0.02)
 
+        desktop.send({"type": "hello"})
+        rehello = None
+        rehello_deadline = time.time() + 1.0
+        while time.time() < rehello_deadline and rehello is None:
+            for frame in desktop.drain():
+                if frame.get("type") == "hello":
+                    rehello = frame
+                    break
+            time.sleep(0.02)
+
+        assert rehello is not None, "agent should repeat hello for a reconnecting desktop"
+
         wms_agent.stop()  # restores stdout before we assert/print
         disconnected = False
         disconnected_deadline = time.time() + 1.0

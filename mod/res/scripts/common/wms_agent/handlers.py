@@ -4,9 +4,12 @@ Game-touching handlers (exec/complete/inspect/dump) are marshaled to the main
 thread by the loop; lint is pure and runs anywhere.
 """
 
+import os
 import sys
 import inspect
 import traceback
+
+from . import __version__
 
 _DEFAULT_COMPLETION_BUDGET = 120
 _MAX_COMPLETION_BUDGET = 10000
@@ -23,6 +26,10 @@ def seed_namespace():
             ns[name] = __import__(name)
         except BaseException:
             pass
+
+
+def handle_hello(req):
+    return {'type': 'hello', 'version': __version__, 'pid': os.getpid()}
 
 
 def handle_exec(req):
@@ -513,6 +520,7 @@ def handle_dump(req):
 
 
 DISPATCH = {
+    'hello': handle_hello,
     'exec': handle_exec,
     'complete': handle_complete,
     'inspect': handle_inspect,

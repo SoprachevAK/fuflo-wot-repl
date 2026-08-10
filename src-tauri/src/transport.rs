@@ -39,7 +39,8 @@ impl FileBufferTransport {
             running: Arc::new(AtomicBool::new(true)),
             sink,
         });
-        transport.reset_buffers();
+        transport.reset_desktop_buffer();
+        transport.send(InFrame::Hello);
         let worker = Arc::clone(&transport);
         thread::spawn(move || worker.read_loop());
         transport
@@ -52,30 +53,32 @@ impl FileBufferTransport {
     /// Send a request and get a receiver that resolves with the matching reply.
     pub fn request(&self, frame: InFrame) -> Receiver<OutFrame> {
         let (tx, rx) = mpsc::channel();
+        let id = frame.id().expect("control frames cannot be requested");
         self.pending
             .lock()
             .unwrap()
-            .insert(frame.id().to_string(), tx);
-        if let Ok(line) = serde_json::to_string(&frame) {
-            self.append("d2c", &line);
-        }
+            .insert(id.to_string(), tx);
+        self.send(frame);
         rx
     }
 
-    /// A previous desktop/game session may have left frames behind after its
-    /// reader stopped. They belong to that session and must not affect the
-    /// next connection.
-    fn reset_buffers(&self) {
-        for name in ["c2d", "d2c"] {
-            let path = self.dir.join(name);
-            if !path.exists() {
-                continue;
-            }
-            let lock = self.dir.join(format!("{name}.lock"));
-            if acquire(&lock) {
-                let _ = fs::write(path, b"");
-                release(&lock);
-            }
+    fn send(&self, frame: InFrame) {
+        if let Ok(line) = serde_json::to_string(&frame) {
+            self.append("d2c", &line);
+        }
+    }
+
+    /// Drop requests left by a previous desktop session. Keep `c2d`: a live
+    /// agent may have already written its hello and startup logs there.
+    fn reset_desktop_buffer(&self) {
+        let path = self.dir.join("d2c");
+        if !path.exists() {
+            return;
+        }
+        let lock = self.dir.join("d2c.lock");
+        if acquire(&lock) {
+            let _ = fs::write(path, b"");
+            release(&lock);
         }
     }
 
@@ -313,6 +316,59 @@ mod tests {
         }
     }
 
+    #[cfg(any(unix, windows))]
+    #[test]
+    fn attaches_to_agent_that_sent_hello_before_transport_started() {
+        let dir = std::env::temp_dir().join(format!(
+            "wms_rust_preconnected_{}",
+            std::process::id()
+        ));
+        let _ = fs::create_dir_all(&dir);
+        fs::write(
+            dir.join("c2d"),
+            format!(
+                "{{\"type\":\"hello\",\"version\":\"test\",\"pid\":{}}}\n",
+                std::process::id()
+            ),
+        )
+        .unwrap();
+
+        let events: Arc<Mutex<Vec<ServerEvent>>> = Arc::new(Mutex::new(Vec::new()));
+        let collected = Arc::clone(&events);
+        let transport = FileBufferTransport::start(
+            dir.clone(),
+            Arc::new(move |event| collected.lock().unwrap().push(event)),
+        );
+
+        let deadline = Instant::now() + Duration::from_secs(1);
+        while Instant::now() < deadline
+            && !events
+                .lock()
+                .unwrap()
+                .iter()
+                .any(|event| matches!(event, ServerEvent::Hello { .. }))
+        {
+            thread::sleep(Duration::from_millis(10));
+        }
+
+        let desktop_handshake = fs::read_to_string(dir.join("d2c")).unwrap();
+        transport.stop();
+        let _ = fs::remove_dir_all(&dir);
+
+        assert!(desktop_handshake.contains("{\"type\":\"hello\"}"));
+        assert!(events
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|event| matches!(
+                event,
+                ServerEvent::Hello {
+                    version: Some(version),
+                    pid: Some(pid),
+                } if version == "test" && *pid == std::process::id() as i64
+            )));
+    }
+
     #[test]
     fn explicit_disconnect_emits_event() {
         let dir = std::env::temp_dir().join(format!("wms_rust_disconnect_{}", std::process::id()));
@@ -351,7 +407,7 @@ mod tests {
     }
 
     #[test]
-    fn start_ignores_frames_left_by_previous_session() {
+    fn start_ignores_disconnect_without_handshake() {
         let dir = std::env::temp_dir().join(format!(
             "wms_rust_stale_session_{}",
             std::process::id()
@@ -359,7 +415,7 @@ mod tests {
         let _ = fs::create_dir_all(&dir);
         fs::write(
             dir.join("c2d"),
-            b"{\"type\":\"hello\",\"pid\":1}\n{\"type\":\"disconnected\"}\n",
+            b"{\"type\":\"disconnected\"}\n",
         )
         .unwrap();
 
