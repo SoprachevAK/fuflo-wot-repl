@@ -9,7 +9,11 @@ use std::collections::HashMap;
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum InFrame {
     Exec { id: String, code: String },
-    Complete { id: String, prefix: String },
+    Complete {
+        id: String,
+        prefix: String,
+        budget: u32,
+    },
     Inspect { id: String, expr: String },
     Lint { id: String, code: String },
     Dump { id: String, expr: String, depth: u32 },

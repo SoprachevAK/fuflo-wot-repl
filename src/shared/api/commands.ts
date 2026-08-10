@@ -1,5 +1,18 @@
 import { invoke, Channel } from '@tauri-apps/api/core'
 import type { GameInfo, OutFrame, ServerEvent } from './dto'
+import {
+  COMPLETION_BUDGET_STORAGE_KEY,
+  DEFAULT_COMPLETION_BUDGET,
+  MAX_COMPLETION_BUDGET,
+} from '@/shared/config'
+import { loadState } from '@/shared/lib'
+
+function completionBudget(): number {
+  const value = loadState<unknown>(COMPLETION_BUDGET_STORAGE_KEY, DEFAULT_COMPLETION_BUDGET)
+  return typeof value === 'number' && Number.isInteger(value)
+    ? Math.min(MAX_COMPLETION_BUDGET, Math.max(0, value))
+    : DEFAULT_COMPLETION_BUDGET
+}
 
 // Tauri v2 maps camelCase JS keys to snake_case Rust params automatically.
 export const api = {
@@ -20,7 +33,8 @@ export const api = {
   disconnect: () => invoke<void>('disconnect'),
 
   execCode: (code: string) => invoke<OutFrame>('exec_code', { code }),
-  complete: (prefix: string) => invoke<OutFrame>('complete', { prefix }),
+  complete: (prefix: string, budget = completionBudget()) =>
+    invoke<OutFrame>('complete', { prefix, budget }),
   inspect: (expr: string) => invoke<OutFrame>('inspect', { expr }),
   lintCode: (code: string) => invoke<OutFrame>('lint_code', { code }),
   dumpObject: (expr: string, depth = 2) => invoke<OutFrame>('dump_object', { expr, depth }),

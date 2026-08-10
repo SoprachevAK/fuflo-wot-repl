@@ -8,6 +8,9 @@ import sys
 import inspect
 import traceback
 
+_DEFAULT_COMPLETION_BUDGET = 120
+_MAX_COMPLETION_BUDGET = 10000
+
 
 def _ns():
     return sys.modules['__main__'].__dict__
@@ -111,13 +114,63 @@ def _iter_public_attrs(obj, keep_dunder=None):
         yield attr
 
 
+_MONACO_SEPARATORS = u'_-. /\\\'":$<>()[]{}'
+
+
+def _strong_match_start(word, index):
+    if index == 0:
+        return True
+    char = word[index]
+    previous = word[index - 1]
+    if char != char.lower() and previous == previous.lower():
+        return True
+    if char in _MONACO_SEPARATORS and previous not in _MONACO_SEPARATORS:
+        return True
+    return previous in _MONACO_SEPARATORS or previous in u' \t'
+
+
+def _fuzzy_subsequence(pattern, word):
+    """Mirror Monaco's default fuzzy candidate gate; Monaco still owns ranking."""
+    pattern = pattern[:128]
+    word_low = word[:128].lower()
+    pattern_low = pattern.lower()
+    if not pattern_low:
+        return True
+    start = 0
+    while True:
+        first = word_low.find(pattern_low[0], start)
+        if first < 0:
+            return False
+        if _strong_match_start(word[:128], first):
+            position = first + 1
+            for char in pattern_low[1:]:
+                position = word_low.find(char, position)
+                if position < 0:
+                    break
+                position += 1
+            else:
+                return True
+        start = first + 1
+
+
+def _matches_completion(pattern, word):
+    if _fuzzy_subsequence(pattern, word):
+        return True
+    if len(pattern) >= 3:
+        for index in range(1, min(7, len(pattern) - 1)):
+            swapped = pattern[:index] + pattern[index + 1] + pattern[index] + pattern[index + 2:]
+            if _fuzzy_subsequence(swapped, word):
+                return True
+    return False
+
+
 def _complete_names(names, partial, ns, budget):
     """Build candidate list from an iterable of names, consuming from budget[0]."""
     candidates = []
-    for name in sorted(names):
+    for name in sorted(names, key=lambda value: (value != partial, value)):
         if name.startswith('__'):
             continue
-        if partial and not name.startswith(partial):
+        if not _matches_completion(partial, name):
             continue
         cand = {'name': name, 'source': 'live'}
         if budget[0] > 0:
@@ -127,9 +180,15 @@ def _complete_names(names, partial, ns, budget):
             except BaseException:
                 pass
         candidates.append(cand)
-        if len(candidates) >= 300:
-            break
     return candidates
+
+
+def _completion_budget(req):
+    try:
+        value = int(req.get('budget', _DEFAULT_COMPLETION_BUDGET))
+    except (TypeError, ValueError, OverflowError):
+        value = _DEFAULT_COMPLETION_BUDGET
+    return min(max(value, 0), _MAX_COMPLETION_BUDGET)
 
 
 def handle_complete(req):
@@ -137,7 +196,7 @@ def handle_complete(req):
     ns = _ns()
     line = req.get('prefix', '')
     base, partial = _split_prefix(line)
-    budget = [120]
+    budget = [_completion_budget(req)]
 
     if base is not None:
         # Evaluate the base expression on the live object and dir() it. This
@@ -148,8 +207,9 @@ def handle_complete(req):
             obj = eval(base, ns)
         except BaseException:
             return out
-        for attr in _iter_public_attrs(obj):
-            if partial and not attr.startswith(partial):
+        for attr in sorted(_iter_public_attrs(obj),
+                           key=lambda value: (value != partial, value)):
+            if not _matches_completion(partial, attr):
                 continue
             cand = {'name': attr, 'source': 'live'}
             if budget[0] > 0:
@@ -159,8 +219,6 @@ def handle_complete(req):
                 except BaseException:
                     pass
             out['candidates'].append(cand)
-            if len(out['candidates']) >= 300:
-                break
         return out
 
     # Bare / global completion: namespace names + builtins.

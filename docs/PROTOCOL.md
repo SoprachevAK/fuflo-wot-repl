@@ -19,11 +19,14 @@ per line.
 
 ```jsonc
 { "id": "<uuid>", "type": "exec",    "code": "player = BigWorld.player()" }
-{ "id": "<uuid>", "type": "complete","prefix": "BigWorld.pla" }
+{ "id": "<uuid>", "type": "complete","prefix": "BigWorld.pla", "budget": 120 }
 { "id": "<uuid>", "type": "inspect", "expr": "BigWorld.player()" }
 { "id": "<uuid>", "type": "lint",    "code": "print x" }
 { "id": "<uuid>", "type": "dump",    "expr": "BigWorld.player()", "depth": 3 }
 ```
+
+`complete.budget` is optional for older clients and defaults to `120`; it limits
+how many live candidates are inspected for kind, documentation, and signatures.
 
 ## Game -> desktop (`c2d`)
 

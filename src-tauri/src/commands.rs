@@ -166,8 +166,20 @@ pub async fn exec_code(state: State<'_, AppState>, code: String) -> Result<OutFr
 }
 
 #[tauri::command]
-pub async fn complete(state: State<'_, AppState>, prefix: String) -> Result<OutFrame, String> {
-    request_outframe(&state, InFrame::Complete { id: new_id(), prefix }).await
+pub async fn complete(
+    state: State<'_, AppState>,
+    prefix: String,
+    budget: u32,
+) -> Result<OutFrame, String> {
+    request_outframe(
+        &state,
+        InFrame::Complete {
+            id: new_id(),
+            prefix,
+            budget,
+        },
+    )
+    .await
 }
 
 #[tauri::command]
