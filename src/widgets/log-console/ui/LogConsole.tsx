@@ -35,7 +35,12 @@ async function copyText(text: string): Promise<void> {
   }
 }
 
-export function LogConsole() {
+interface LogConsoleProps {
+  verticalLayout: boolean
+  onToggleLayout: () => void
+}
+
+export function LogConsole({ verticalLayout, onToggleLayout }: LogConsoleProps) {
   const host = useRef<HTMLDivElement | null>(null)
   const termRef = useRef<Terminal | null>(null)
   const filterMenu = useRef<HTMLDetailsElement | null>(null)
@@ -157,6 +162,22 @@ export function LogConsole() {
       className="w-full"
       actions={
         <div className="flex items-center gap-1.5">
+          <HeaderButton
+            onClick={onToggleLayout}
+            title={verticalLayout ? 'Switch to horizontal layout' : 'Switch to vertical layout'}
+            aria-label={verticalLayout ? 'Switch to horizontal layout' : 'Switch to vertical layout'}
+            className="inline-flex w-7 items-center justify-center p-0"
+            style={{ padding: 0 }}
+          >
+            <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" className="h-3.5 w-3.5">
+              <rect x="2" y="2" width="12" height="12" rx="0.5" className="stroke-current" strokeWidth="1.2" />
+              {verticalLayout ? (
+                <path d="M3 8h10v5H3z" className="fill-current" />
+              ) : (
+                <path d="M8 3h5v10H8z" className="fill-current" />
+              )}
+            </svg>
+          </HeaderButton>
           <details ref={filterMenu} className="relative z-20">
             <summary
               title="Filter log levels"

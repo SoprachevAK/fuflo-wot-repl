@@ -38,6 +38,10 @@
     user-select: none;
   }
 
+  button {
+    cursor: pointer;
+  }
+
   button:disabled {
     pointer-events: none;
   }
