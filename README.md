@@ -1,124 +1,68 @@
+### | EN | [RU](./README_RU.md) |
+
 # Fuflo WoT REPL
 
-A desktop IDE for World of Tanks Python mod development: a **live REPL into the
-running game client**, with code completion and linting that no existing tool
-(notably PJOrion) provides. A modern, cliche-free reimplementation of PJOrion's
-"WOT-Client" workflow.
+A desktop application for developing mods for **World of Tanks** and **Mir Tankov**. It connects to a running client, executes Python 2.7 code on the game thread, and displays live output.
 
-> Dev/private use only. Injecting a loader and running arbitrary code in the client
-> is against WG ToS and detectable; hiding that is explicitly out of scope.
+![Fuflo WoT REPL window](./docs/img/hero.png)
 
-See [`docs/PLAN.md`](docs/PLAN.md) for the full design and
-[`docs/PROTOCOL.md`](docs/PROTOCOL.md) for the wire protocol.
+## Features
 
-## Architecture
+- Support for both **World of Tanks** and **Mir Tankov**.
+- Execute Python code in a live client.
+- Stream `stdout`, `stderr`, and `BigWorld.log*` messages to the built-in console.
+- Search logs and filter them by log level.
+- Autocomplete based on live client objects, including their signatures.
+- Launch a client or replay, or connect to an already running game.
+- Automatically discover and remember added game clients.
+- An embedded MCP server for controlling the client from AI agents.
 
+## Installation
+
+[Download](https://github.com/Newmcpe/fuflo-wot-repl/releases/latest) and install the latest installer from the GitHub releases.
+
+## Usage
+
+1. Launch the application. It automatically detects common game installations; if yours is not listed, click **Browse…** and select the client root folder.
+2. Select a client and click **Launch Game**. To launch a replay, use the arrow beside that button and select a `.wotreplay` or `.mtreplay` file.
+3. The application installs the agent into the selected client's `mods/<version>` directory, starts the game, and waits for the **Connected** status. If the game is already running and the agent was installed previously, click **Connect**.
+4. Enter code in the editor and press `Ctrl/Cmd+Enter`. The selection is executed, or the entire editor when nothing is selected. Results and logs appear in the console on the right.
+
+After connecting, the application automatically inspects the available client types and saves generated stubs in `%LOCALAPPDATA%\FufloWoTREPL\stubs`. A separate Python 2.7 Jedi worker performs static analysis of the game sources; its protocol and configuration are described in [`tools/jedi_worker/README.md`](tools/jedi_worker/README.md).
+
+## MCP
+
+On first launch, the application creates and enables a local Streamable HTTP MCP server by default. It listens on `0.0.0.0:8765`; the stable local URL looks like this:
+
+```text
+http://127.0.0.1:8765/mcp?token=<persistent-UUID>
 ```
-Desktop (Tauri 2 + React 19 + TS + Tailwind 4, FSD)
-  Monaco editor  ── completion / lint / hover providers ─┐
-  xterm console  ◄── Channel<LogBatch> ──────────────────┤
-        │ invoke()                                        │
-  Rust backend                                            │
-    Tauri commands ─┐
-                    ├─ ClientManager (one active client) ─ protocol ─ file-buffer
-    MCP Streamable  ┘           │                              │
-    HTTP /mcp            JediWorker (py2.7)            c2d / d2c + *.lock files
-                                                               │
-In-game agent (py2.7 / BigWorld)
-  bw_site loader ─ capture (stdout + BigWorld.log*) ─ main-thread runner ─ handlers
-```
 
-Three channels over one file-buffer transport: continuous **stdout/log stream**,
-**exec results** by id, and **complete / inspect / lint / dump** request/response.
-Completion and lint are two-layer: static (jedi over the decompiled source, works
-offline) merged with dynamic runtime introspection from the live game.
+The token and server state are stored in `%LOCALAPPDATA%\FufloWoTREPL\mcp.json`. Click **MCP** in the status bar to enable or disable the server, copy a local or network URL, or add the `wot_repl` configuration to Codex or Claude Code. The corresponding CLI must be available on `PATH` for the add buttons to work.
 
-## Layout
-
-| Path | What |
-|---|---|
-| `src/` | FSD frontend (`app` / `pages` / `widgets` / `features` / `entities` / `shared`) |
-| `src-tauri/` | Rust backend (protocol, transport, jedi supervisor, commands) |
-| `mod/` | universal `.mod` source tree, Python 2.7 builder, and agent tests |
-| `tools/jedi_worker/` | CPython 2.7 jedi static worker (stdio JSON) |
-| `docs/PLAN.md` | full implementation plan |
-
-## Prerequisites
-
-- Node 20+ and Rust 1.88+ (desktop app)
-- CPython **2.7** for the in-game agent and the jedi static worker
-  (`jedi==0.17.2` + `parso 0.7.x` are the last py2-capable releases; see
-  `tools/jedi_worker/requirements.txt`). The `python27.dll` + stdlib bundled with
-  PJOrion works as that interpreter.
-
-## Develop
+To add the server to Codex manually:
 
 ```sh
-npm install
-npm run dev            # frontend development server
-npm run build          # tsc + vite production build
-npm run lint:fsd       # steiger FSD boundary check
+codex mcp add wot_repl --url "http://127.0.0.1:8765/mcp?token=<token>"
 ```
 
-## MCP setup
+The server exposes six tools:
 
-The app includes an MCP Streamable HTTP server. It binds to `0.0.0.0:8765`; its
-stable local URL is `http://127.0.0.1:8765/mcp?token=<persistent-uuid>`. On first
-use it creates `%LOCALAPPDATA%/FufloWoTREPL/mcp.json`; the UUID token is generated
-once and retained when the server is enabled or disabled.
+| Tool               | Purpose                                                                                                  |
+| ------------------ | -------------------------------------------------------------------------------------------------------- |
+| `wot_list_clients` | Find supported game installations and report their status.                                               |
+| `wot_start_client` | Install/connect the agent and launch a client; accepts `game_dir` and optional `replay_path`.            |
+| `wot_close_client` | Gracefully close the active client; optional `timeout_ms` is limited to 0–60000.                         |
+| `wot_kill_client`  | Force-terminate the active client after verifying its process.                                           |
+| `wot_exec`         | Run Python 2.7 code on the game's main thread; accepts `code` and optional `timeout_ms` from 1 to 30000. |
+| `wot_read_log`     | Read recent log messages; supports `cursor`, `limit`, and a short wait through `wait_ms`.                |
 
-Click the **MCP** badge in the lower status bar to inspect server status, enable or
-disable the listener, and copy the local URL. The popover can also register or
-unregister `wot_repl` through **Add to/Remove from Codex** and **Add to/Remove from
-Claude**; the corresponding `codex` or `claude` CLI must be installed and available
-on the app's `PATH`. Add actions register the stable local URL.
+`wot_exec` can change the game state, while `wot_close_client` and `wot_kill_client` terminate the process. Start an MCP client session with `wot_list_clients`, and use `wot_close_client` before resorting to forced termination.
 
-The popover also shows a **Network URL** using the advertised LAN IPv4. Use that
-alternative when the app runs in a VM or another machine must connect. The host
-must be able to reach the guest IP; firewall rules and NAT, host-only, or bridged
-networking are user-managed, so choose a mode that permits host-to-guest traffic
-on TCP port 8765.
+## Architecture and development
 
-The server exposes exactly six tools:
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — application components and their interactions.
+- [`docs/PROTOCOL.md`](docs/PROTOCOL.md) — file-based protocol between the application and the in-game agent.
+- [`docs/PLAN.md`](docs/PLAN.md) — the original implementation plan and project boundaries.
 
-| Tool | Parameters and behavior |
-|---|---|
-| `wot_list_clients` | No parameters. Lists detected installations and their process/agent status. |
-| `wot_start_client` | `game_dir`, optional `replay_path`. Installs/connects the agent as needed and starts that client; starting the already-active client is a no-op, and only one client may be active. |
-| `wot_close_client` | Optional `timeout_ms` (default 10000, clamped to 0..60000). Requests graceful shutdown and waits; it never escalates automatically to kill. |
-| `wot_kill_client` | No parameters. Force-terminates the saved active process after executable identity verification. |
-| `wot_exec` | `code`, optional `timeout_ms` (default 30000, clamped to 1..30000). Runs arbitrary Python on the game main thread. A Python exception is a successful tool result with `ok: false`; connection, timeout, validation, and other tool failures return MCP `isError: true`. |
-| `wot_read_log` | Optional `cursor`, `limit` (default 200, clamped to 1..1000), and `wait_ms` (default 0, clamped to 0..5000). Returns newer entries after a cursor, or the latest entries when omitted; history is bounded to 10,000 entries and 4 MiB of UTF-8 text, with `truncated` indicating lost history. |
-
-Security is intentionally minimal: the URL token is a bearer-like gate, HTTP has
-no TLS, and the listener binds on every interface. Use it only on a trusted
-development/VM network.
-
-## Build for Windows
-
-```powershell
-.\build-windows.ps1
-.\build-windows.ps1 -Version v0.5.0
-```
-
-Without `-Version`, the version comes from `package.json`; an explicit version
-may include the Git tag's `v` prefix. The same version is used for the universal `.mod`
-and Tauri installers. The script also runs the Python 2.7 agent and Rust tests,
-checks FSD boundaries, and produces the final Windows installers. The release
-workflow calls the same script from a clean checkout.
-
-## Status
-
-| Milestone | State |
-|---|---|
-| M0 scaffold (Tauri + React + TS + Tailwind 4 + FSD) | done, builds green |
-| M1 stdout stream | code complete; agent capture + Rust watcher + xterm wired |
-| M2 exec round-trip | code complete; Monaco + main-thread runner |
-| M3 static completion/lint | code complete; jedi worker + Monaco providers |
-| M4 dynamic layer | code complete; runtime complete/inspect/stubgen + merge |
-| M5 polish | command palette, connect controls, design system |
-
-Verified without a game: frontend `tsc`+`vite` build, `cargo check`, steiger FSD
-check, agent unit + integration tests (`mod/tests/selftest.py`, `mod/tests/itest.py`), jedi
-worker protocol. **Needs a live WoT client** to validate `BigWorld.callback`
-main-thread marshaling, the real log volume, and end-to-end injection.
+The main code lives in `src/` (React/TypeScript, Feature-Sliced Design), `src-tauri/` (Tauri/Rust), and `mod/` (the Python 2.7 agent and its tests).
